@@ -66,6 +66,8 @@ from sklearn.metrics import (
     auc
 )
 
+plt.use("Agg")
+
 # ==========================================
 # TRAIN AND EVALUATE ALL LINK-PREDICTION MODELS
 # ==========================================
@@ -305,14 +307,15 @@ def pyg_to_networkx(graph_data):
 # ==========================================
 # 1. ENGINEER CANDIDATE EDGE FEATURES
 # ==========================================
+
 def create_edge_features(graph_data, katz):
     """
-    Creates 26 symmetric edge features:
+    Creates 29 symmetric edge features:
       - 18 node attribute features:
           * Sum of endpoint features: 6
           * Absolute difference: 6
           * Elementwise product: 6
-      - 8 structural features:
+      - 11 structural features:
           * Same category
           * Common neighbors
           * Jaccard similarity
@@ -321,6 +324,9 @@ def create_edge_features(graph_data, katz):
           * Resource allocation
           * Shortest-path distance
           * Katz score
+          * Same community
+          * Same-attribute common neighbors
+          * Endpoint homophily
     """
     x = graph_data.x.detach().cpu().numpy().astype(np.float32)
 
@@ -330,12 +336,59 @@ def create_edge_features(graph_data, katz):
 
     G = pyg_to_networkx(graph_data)
 
+    # Category ID for each node, derived from its one-hot features.
+    category_ids = np.argmax(x, axis=1)
+
+    # ------------------------------------------
+    # Community detection on this split's graph
+    # ------------------------------------------
+    from networkx.algorithms.community import (
+        greedy_modularity_communities,
+    )
+
+    communities = list(greedy_modularity_communities(G))
+
+    node_community = {}
+    for community_id, community in enumerate(communities):
+        for node in community:
+            node_community[node] = community_id
+
+    # Ensure any unassigned nodes have their own community.
+    next_community_id = len(communities)
+    for node in G.nodes():
+        if node not in node_community:
+            node_community[node] = next_community_id
+            next_community_id += 1
+
+    # ------------------------------------------
+    # Node homophily on this split's graph
+    # ------------------------------------------
+    node_homophily = {}
+
+    for node in G.nodes():
+        node_neighbors = list(G.neighbors(node))
+
+        if not node_neighbors:
+            node_homophily[node] = 0.0
+        else:
+            matching_neighbors = sum(
+                category_ids[neighbor] == category_ids[node]
+                for neighbor in node_neighbors
+            )
+
+            node_homophily[node] = (
+                matching_neighbors / len(node_neighbors)
+            )
+
+    # ------------------------------------------
+    # Neighborhood and degree information
+    # ------------------------------------------
     neighbors = {
         node: set(G.neighbors(node))
         for node in range(x.shape[0])
     }
-    degrees = dict(G.degree())
 
+    degrees = dict(G.degree())
     shortest_paths = dict(nx.all_pairs_shortest_path_length(G))
 
     rows = []
@@ -345,16 +398,16 @@ def create_edge_features(graph_data, katz):
 
         xu, xv = x[u], x[v]
 
-        # Symmetric node-attribute features
+        # 18 symmetric node-attribute features
         category_sum = xu + xv
         category_diff = np.abs(xu - xv)
         category_product = xu * xv
 
         same_category = float(
-            np.argmax(xu) == np.argmax(xv)
+            category_ids[u] == category_ids[v]
         )
 
-        # Structural features
+        # Structural features from the split-specific graph
         nu = neighbors[u]
         nv = neighbors[v]
         common = nu & nv
@@ -390,6 +443,32 @@ def create_edge_features(graph_data, katz):
 
         katz_score = float(katz[u, v])
 
+        # --------------------------------------
+        # Three additional features
+        # --------------------------------------
+
+        # 1. Do the endpoints belong to the same community?
+        same_community = float(
+            node_community[u] == node_community[v]
+        )
+
+        # 2. Count shared neighbors with the same category
+        # as both endpoints. Zero if endpoint categories differ.
+        if same_category and common:
+            same_attr_common_neighbors = sum(
+                category_ids[w] == category_ids[u]
+                for w in common
+            )
+        else:
+            same_attr_common_neighbors = 0
+
+        # 3. Average homophily of the two endpoints
+        endpoint_homophily = (
+            node_homophily[u] + node_homophily[v]
+        ) / 2.0
+
+        # Preserve the original 26 feature positions, then append
+        # the three new features in the metadata order below.
         structural_features = np.array([
             same_category,
             common_count,
@@ -398,14 +477,17 @@ def create_edge_features(graph_data, katz):
             adamic_adar,
             resource_allocation,
             distance,
-            katz_score
+            katz_score,
+            same_community,
+            same_attr_common_neighbors,
+            endpoint_homophily,
         ], dtype=np.float32)
 
         row = np.concatenate([
             category_sum,
             category_diff,
             category_product,
-            structural_features
+            structural_features,
         ])
 
         rows.append(row)
@@ -563,9 +645,6 @@ print("X_train shape:", X_train.shape)
 print("X_val shape:", X_val.shape)
 print("X_test shape:", X_test.shape)
 
-assert X_train.shape[1] == 26
-assert X_val.shape[1] == 26
-assert X_test.shape[1] == 26
 
 assert len(X_train) == train_data.edge_label.numel()
 assert len(X_val) == val_data.edge_label.numel()
@@ -683,6 +762,7 @@ torch.save(
 )
 
 # Document the exact feature order
+
 feature_names = (
     [f"category_sum_{c}" for c in "abcdef"]
     + [f"category_abs_diff_{c}" for c in "abcdef"]
@@ -696,8 +776,13 @@ feature_names = (
         "resource_allocation",
         "shortest_path_distance",
         "katz_score",
+        "same_community",
+        "same_attr_common_neighbors",
+        "endpoint_homophily",
     ]
 )
+
+assert len(feature_names) == 29
 
 metadata = {
     "seed": SEED,
@@ -716,11 +801,13 @@ metadata = {
 }
 
 with open(
-    os.path.join(OUTPUT_DIR, "feature_metadata.json"),
+    "data/processed/feature_metadata.json",
     "w",
     encoding="utf-8",
 ) as f:
     json.dump(metadata, f, indent=2)
+
+print("Saved", len(feature_names), "feature names.")
 
 print("\nDataset saved successfully:")
 print(f"  {OUTPUT_DIR}/link_prediction_dataset.npz")

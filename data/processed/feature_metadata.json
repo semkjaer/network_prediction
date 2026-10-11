@@ -1,6 +1,6 @@
 {
   "seed": 42,
-  "num_features": 26,
+  "num_features": 29,
   "feature_names": [
     "category_sum_a",
     "category_sum_b",
@@ -27,7 +27,10 @@
     "adamic_adar",
     "resource_allocation",
     "shortest_path_distance",
-    "katz_score"
+    "katz_score",
+    "same_community",
+    "same_attr_common_neighbors",
+    "endpoint_homophily"
   ],
   "split": {
     "train": 0.8,

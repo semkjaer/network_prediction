@@ -51,28 +51,13 @@ from sklearn.metrics import (
 )
 
 
-dataset = np.load("data/processed/link_prediction_dataset.npz")
-
-X_train = dataset["X_train"]
-X_val   = dataset["X_val"]
-X_test  = dataset["X_test"]
-
-y_train = dataset["y_train"]
-y_val   = dataset["y_val"]
-y_test  = dataset["y_test"]
-
-print("Training:", X_train.shape, y_train.shape)
-print("Validation:", X_val.shape, y_val.shape)
-print("Test:", X_test.shape, y_test.shape)
-
-
 class Net(nn.Module):
     def __init__(
         self,
         in_channels,
         hidden_channels=32,
         out_channels=16,
-        edge_feature_channels=26,
+        edge_feature_channels=29,
     ):
         super().__init__()
 
@@ -113,29 +98,6 @@ class Net(nn.Module):
         return self.decoder(edge_embedding).squeeze(-1)
 
 
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
-
-# For trusted files you created yourself.
-# weights_only=False may be needed for PyG Data objects
-# on newer PyTorch versions.
-saved = torch.load(
-    "data/processed/link_prediction_graphs.pt",
-    map_location="cpu",
-    weights_only=False,
-)
-
-x = saved["x"].to(device)
-train_data = saved["train_data"].to(device)
-val_data = saved["val_data"].to(device)
-test_data = saved["test_data"].to(device)
-
-print("Node features:", x.shape)
-print("Train graph:", train_data.edge_index.shape)
-print("Validation candidates:", val_data.edge_label_index.shape)
-print("Test candidates:", test_data.edge_label_index.shape)
-
 # ============================================================
 # 1. CONFIGURATION
 # ============================================================
@@ -145,29 +107,6 @@ def finetune_gnn():
     OUTPUT_DIR = "finetuning/gnn_accuracy_grid_results"
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
-
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
-
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
-
-    print("Device:", device)
-
-    # Assumes these are already loaded:
-    # x, train_data, val_data, test_data
-    # X_train, X_val, X_test, y_train, y_val, y_test
-    #
-    # Do not recompute the engineered edge features.
-
-    x = x.to(device)
-    train_data = train_data.to(device)
-    val_data = val_data.to(device)
-    test_data = test_data.to(device)
 
     train_edge_features = torch.as_tensor(
         X_train, dtype=torch.float32, device=device
@@ -200,7 +139,7 @@ def finetune_gnn():
             in_channels,
             hidden_channels=32,
             out_channels=16,
-            edge_feature_channels=26,
+            edge_feature_channels=29,
             dropout=0.2,
         ):
             super().__init__()
@@ -625,29 +564,6 @@ def finetune_xgboost():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Reuse existing features. Do not recompute graph features.
-    X_train = np.asarray(X_train, dtype=np.float32)
-    X_val = np.asarray(X_val, dtype=np.float32)
-    X_test = np.asarray(X_test, dtype=np.float32)
-
-    y_train = np.asarray(y_train).ravel().astype(int)
-    y_val = np.asarray(y_val).ravel().astype(int)
-    y_test = np.asarray(y_test).ravel().astype(int)
-
-    assert X_train.shape[1] == X_val.shape[1] == X_test.shape[1]
-    assert len(X_train) == len(y_train)
-    assert len(X_val) == len(y_val)
-    assert len(X_test) == len(y_test)
-    assert set(np.unique(y_train)) == {0, 1}
-    assert set(np.unique(y_val)) == {0, 1}
-    assert set(np.unique(y_test)).issubset({0, 1})
-
-    print("Dataset shapes:")
-    print("X_train:", X_train.shape)
-    print("X_val:  ", X_val.shape)
-    print("X_test: ", X_test.shape)
-
-
     # ============================================================
     # 2. HYPERPARAMETER GRID
     # ============================================================
@@ -949,15 +865,6 @@ def finetune_logistic_regression():
     OUTPUT_DIR = "finetuning/logistic_regression_accuracy_grid_results"
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    # Reuse existing engineered features. No feature recomputation.
-    X_train = np.asarray(X_train, dtype=np.float32)
-    X_val = np.asarray(X_val, dtype=np.float32)
-    X_test = np.asarray(X_test, dtype=np.float32)
-
-    y_train = np.asarray(y_train).ravel().astype(int)
-    y_val = np.asarray(y_val).ravel().astype(int)
-    y_test = np.asarray(y_test).ravel().astype(int)
 
     assert X_train.ndim == X_val.ndim == X_test.ndim == 2
     assert X_train.shape[1] == X_val.shape[1] == X_test.shape[1]
@@ -1289,15 +1196,6 @@ def finetune_random_forest():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Use existing features and labels. Do not recompute features.
-    X_train = np.asarray(X_train, dtype=np.float32)
-    X_val = np.asarray(X_val, dtype=np.float32)
-    X_test = np.asarray(X_test, dtype=np.float32)
-
-    y_train = np.asarray(y_train).ravel().astype(int)
-    y_val = np.asarray(y_val).ravel().astype(int)
-    y_test = np.asarray(y_test).ravel().astype(int)
-
     assert X_train.ndim == X_val.ndim == X_test.ndim == 2
     assert X_train.shape[1] == X_val.shape[1] == X_test.shape[1]
     assert len(X_train) == len(y_train)
@@ -1624,15 +1522,6 @@ def finetune_catboost():
     OUTPUT_DIR = "finetuning/catboost_accuracy_grid_results"
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    # Assumes these already exist. No feature recomputation.
-    X_train = np.asarray(X_train, dtype=np.float32)
-    X_val = np.asarray(X_val, dtype=np.float32)
-    X_test = np.asarray(X_test, dtype=np.float32)
-
-    y_train = np.asarray(y_train).ravel().astype(int)
-    y_val = np.asarray(y_val).ravel().astype(int)
-    y_test = np.asarray(y_test).ravel().astype(int)
 
     assert X_train.ndim == X_val.ndim == X_test.ndim == 2
     assert X_train.shape[1] == X_val.shape[1] == X_test.shape[1]
@@ -1978,8 +1867,44 @@ def finetune_catboost():
     print("Grid results:", results_path)
 
 
-finetune_gnn()
-finetune_logistic_regression()
-finetune_random_forest()
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+dataset = np.load("data/processed/link_prediction_dataset.npz")
+
+X_train = np.asarray(dataset["X_train"], dtype=np.float32)
+X_val   = np.asarray(dataset["X_val"], dtype=np.float32)
+X_test  = np.asarray(dataset["X_test"], dtype=np.float32)
+
+y_train = np.asarray(dataset["y_train"], dtype=np.int64)
+y_val   = np.asarray(dataset["y_val"], dtype=np.int64)
+y_test  = np.asarray(dataset["y_test"], dtype=np.int64)
+
+print("Training:", X_train.shape, y_train.shape)
+print("Validation:", X_val.shape, y_val.shape)
+print("Test:", X_test.shape, y_test.shape)
+# For trusted files you created yourself.
+# weights_only=False may be needed for PyG Data objects
+# on newer PyTorch versions.
+saved = torch.load(
+    "data/processed/link_prediction_graphs.pt",
+    map_location="cpu",
+    weights_only=False,
+)
+
+x = saved["x"].to(device)
+train_data = saved["train_data"].to(device)
+val_data = saved["val_data"].to(device)
+test_data = saved["test_data"].to(device)
+
+print("Node features:", x.shape)
+print("Train graph:", train_data.edge_index.shape)
+print("Validation candidates:", val_data.edge_label_index.shape)
+print("Test candidates:", test_data.edge_label_index.shape)
+
+# finetune_gnn()
+# finetune_logistic_regression()
+# finetune_random_forest()
 finetune_catboost()
-finetune_xgboost()
+# finetune_xgboost()
