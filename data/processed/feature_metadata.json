@@ -1,0 +1,42 @@
+{
+  "seed": 42,
+  "num_features": 26,
+  "feature_names": [
+    "category_sum_a",
+    "category_sum_b",
+    "category_sum_c",
+    "category_sum_d",
+    "category_sum_e",
+    "category_sum_f",
+    "category_abs_diff_a",
+    "category_abs_diff_b",
+    "category_abs_diff_c",
+    "category_abs_diff_d",
+    "category_abs_diff_e",
+    "category_abs_diff_f",
+    "category_product_a",
+    "category_product_b",
+    "category_product_c",
+    "category_product_d",
+    "category_product_e",
+    "category_product_f",
+    "same_category",
+    "common_neighbors",
+    "jaccard",
+    "preferential_attachment",
+    "adamic_adar",
+    "resource_allocation",
+    "shortest_path_distance",
+    "katz_score"
+  ],
+  "split": {
+    "train": 0.8,
+    "validation": 0.1,
+    "test": 0.1
+  },
+  "split_method": "PyG RandomLinkSplit",
+  "is_undirected": true,
+  "disjoint_train_ratio": 0.1,
+  "negative_sampling_ratio": 1.0,
+  "katz_beta": 0.01875
+}

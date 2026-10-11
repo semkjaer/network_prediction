@@ -1,0 +1,9 @@
+torch
+torch-geometric
+scikit-learn
+pandas
+numpy
+ipykernel
+matplotlib
+xgboost
+catboost
