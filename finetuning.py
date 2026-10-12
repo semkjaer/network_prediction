@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 
 # Visualization
+import matplotlib
+matplotlib.use("Agg")  # Use a non-interactive backend for saving figures
 import matplotlib.pyplot as plt
 
 # PyTorch

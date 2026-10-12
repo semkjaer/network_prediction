@@ -14,18 +14,16 @@ from scipy.sparse.linalg import factorized, svds
 edges_path = 'data/input/edges_train.edgelist'
 
 def pyg_to_networkx(graph_data):
-    """Use only the message-passing edges visible in this split."""
-    edge_index = graph_data.edge_index.detach().cpu()
+    """Build NetworkX graph ONLY from the visible message-passing edges in this split."""
+    edge_index = graph_data.edge_index.detach().cpu().numpy()
     num_nodes = graph_data.x.size(0)
+    
     G = nx.Graph()
-    G.add_nodes_from(range(num_nodes))        # fixes node order BEFORE edges are added
-    G.add_edges_from(
-        nx.read_edgelist(edges_path, delimiter=",", nodetype=int).edges()
-    )
-
-    # Guard against this coming back
-    assert list(G.nodes()) == list(range(num_nodes)), "Node order is not 0..N-1"
-
+    G.add_nodes_from(range(num_nodes))
+    
+    edges = list(zip(edge_index[0], edge_index[1]))
+    G.add_edges_from(edges)
+    G.remove_edges_from(nx.selfloop_edges(G))
     return G
 
 

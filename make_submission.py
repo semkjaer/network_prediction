@@ -93,7 +93,7 @@ SUBMISSION_COLUMN = "Predicted"   # match the column name of the sample submissi
 VERIFY_FEATURES = True     # recompute X_test with link_features.py and compare
 SANITY_CHECK = True        # train-only fit, top-K accuracy on the test split
 
-FINAL_MODEL = "GNN"
+FINAL_MODEL = "Logistic Regression"  # None = pick the best by test top-K accuracy
 
 MODEL_PATHS = {
     "Logistic Regression": Path(

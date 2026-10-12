@@ -1,9 +1,10 @@
 torch
 torch-geometric
-scikit-learn
 pandas
 numpy
 ipykernel
 matplotlib
 xgboost
 catboost
+scikit-learn==1.5.2
+joblib==1.4.2
