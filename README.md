@@ -9,3 +9,8 @@ pip install -r requirements.txt
 
 python pipeline.py
 python finetuning.py
+python make_submission.py # creates outputfile at: data/output/submission.csv
+
+# analysis
+
+see prediction.py

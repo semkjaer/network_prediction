@@ -46,5 +46,5 @@
   "is_undirected": true,
   "disjoint_train_ratio": 0.1,
   "negative_sampling_ratio": 1.0,
-  "katz_beta": 0.014516129032258065
+  "katz_beta": 0.018367346938775512
 }

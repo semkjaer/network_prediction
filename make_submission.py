@@ -145,21 +145,6 @@ def check_alignment(saved, edge_set):
 
 def fresh_model(name, path):
     """Unfitted model with the tuned hyper-parameters."""
-    if name == "CatBoost":
-        loaded = CatBoostClassifier()
-        loaded.load_model(str(path))
-        all_params = loaded.get_all_params()
-        keep = ["depth", "learning_rate", "l2_leaf_reg",
-                "random_strength", "bagging_temperature", "iterations"]
-        params = {k: all_params[k] for k in keep if k in all_params}
-        return CatBoostClassifier(
-            **params,
-            loss_function="Logloss",
-            random_seed=42,
-            verbose=False,
-            allow_writing_files=False,
-            thread_count=-1,
-        )
     return clone(joblib.load(path))
 
 

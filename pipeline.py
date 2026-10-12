@@ -297,18 +297,16 @@ np.random.seed(SEED)
 
 
 def pyg_to_networkx(graph_data):
-    """Use only the message-passing edges visible in this split."""
-    edge_index = graph_data.edge_index.detach().cpu()
+    """Build NetworkX graph ONLY from the visible message-passing edges in this split."""
+    edge_index = graph_data.edge_index.detach().cpu().numpy()
     num_nodes = graph_data.x.size(0)
-
+    
     G = nx.Graph()
-    G.add_nodes_from(range(num_nodes))        # fixes node order BEFORE edges are added
-    G.add_edges_from(
-        nx.read_edgelist(edges_path, delimiter=",", nodetype=int).edges()
-    )
-
-    # Guard against this coming back
-    assert list(G.nodes()) == list(range(num_nodes)), "Node order is not 0..N-1"
+    G.add_nodes_from(range(num_nodes))
+    
+    edges = list(zip(edge_index[0], edge_index[1]))
+    G.add_edges_from(edges)
+    G.remove_edges_from(nx.selfloop_edges(G))
     return G
 
 
@@ -558,12 +556,15 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     rows = []
 
-    shortest_paths = dict(nx.all_pairs_shortest_path_length(G))
-
     for u, v in candidate_edges:
         u, v = int(u), int(v)
 
         xu, xv = x[u], x[v]
+
+        
+        had_edge = G.has_edge(u, v)
+        if had_edge:
+            G.remove_edge(u, v)
 
         # Original 18 endpoint features
         category_sum = xu + xv
@@ -572,7 +573,8 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
         same_category = float(category_ids[u] == category_ids[v])
 
-        nu, nv = neighbors[u], neighbors[v]
+        nu = set(G.neighbors(u))
+        nv = set(G.neighbors(v))
         common = nu & nv
 
         common_count = len(common)
@@ -582,25 +584,30 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
             common_count / union_count if union_count else 0.0
         )
 
-        preferential_attachment = degrees[u] * degrees[v]
+        deg_u = G.degree(u)
+        deg_v = G.degree(v)
+        preferential_attachment = deg_u * deg_v
 
         adamic_adar = sum(
-            1.0 / np.log(degrees[w])
+            1.0 / np.log(G.degree(w))
             for w in common
-            if degrees[w] > 1
+            if G.degree(w) > 1
         )
 
         resource_allocation = sum(
-            1.0 / degrees[w]
+            1.0 / G.degree(w)
             for w in common
-            if degrees[w] > 0
+            if G.degree(w) > 0
         )
 
-        distance = shortest_paths.get(u, {}).get(
-            v, float("inf")
-        )
-        if np.isinf(distance):
+        try:
+            distance = float(nx.shortest_path_length(G, u, v))
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
             distance = -1.0
+
+        # If had_edge was true, restore the edge in G
+        if had_edge:
+            G.add_edge(u, v)
 
         katz_score = float(katz[u, v])
 

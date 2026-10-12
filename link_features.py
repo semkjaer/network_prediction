@@ -286,12 +286,14 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     rows = []
 
-    shortest_paths = dict(nx.all_pairs_shortest_path_length(G))
-
     for u, v in candidate_edges:
         u, v = int(u), int(v)
 
         xu, xv = x[u], x[v]
+
+        had_edge = G.has_edge(u, v)
+        if had_edge:
+            G.remove_edge(u, v)
 
         category_sum = xu + xv
         category_diff = np.abs(xu - xv)
@@ -299,7 +301,8 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
         same_category = float(category_ids[u] == category_ids[v])
 
-        nu, nv = neighbors[u], neighbors[v]
+        nu = set(G.neighbors(u))
+        nv = set(G.neighbors(v))
         common = nu & nv
 
         common_count = len(common)
@@ -309,25 +312,29 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
             common_count / union_count if union_count else 0.0
         )
 
-        preferential_attachment = degrees[u] * degrees[v]
+        deg_u = G.degree(u)
+        deg_v = G.degree(v)
+        preferential_attachment = deg_u * deg_v
 
         adamic_adar = sum(
-            1.0 / np.log(degrees[w])
+            1.0 / np.log(G.degree(w))
             for w in common
-            if degrees[w] > 1
+            if G.degree(w) > 1
         )
 
         resource_allocation = sum(
-            1.0 / degrees[w]
+            1.0 / G.degree(w)
             for w in common
-            if degrees[w] > 0
+            if G.degree(w) > 0
         )
 
-        distance = shortest_paths.get(u, {}).get(
-            v, float("inf")
-        )
-        if np.isinf(distance):
+        try:
+            distance = float(nx.shortest_path_length(G, u, v))
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
             distance = -1.0
+
+        if had_edge:
+            G.add_edge(u, v)
 
         katz_score = float(katz[u, v])
 
