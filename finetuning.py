@@ -1,32 +1,32 @@
-# Standard library
+                  
 import copy
 import json
 import os
 import random
 from itertools import product
 
-# Data processing
+                 
 import joblib
 import networkx as nx
 import numpy as np
 import pandas as pd
 
-# Visualization
+               
 import matplotlib
-matplotlib.use("Agg")  # Use a non-interactive backend for saving figures
+matplotlib.use("Agg")                                                    
 import matplotlib.pyplot as plt
 
-# PyTorch
+         
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# PyTorch Geometric
+                   
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import RandomLinkSplit
 
-# Classical machine learning models
+                                   
 from catboost import CatBoostClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -34,7 +34,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-# Evaluation metrics
+                    
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -99,9 +99,9 @@ class Net(nn.Module):
         return self.decoder(edge_embedding).squeeze(-1)
 
 
-# ============================================================
-# 1. CONFIGURATION
-# ============================================================
+                                                              
+                  
+                                                              
 def finetune_gnn():
 
     SEED = 42
@@ -130,9 +130,9 @@ def finetune_gnn():
     THRESHOLDS = np.round(np.arange(0.20, 0.801, 0.01), 2)
 
 
-    # ============================================================
-    # 2. MODEL
-    # ============================================================
+                                                                  
+              
+                                                                  
 
     class Net(nn.Module):
         def __init__(
@@ -189,9 +189,9 @@ def finetune_gnn():
             return self.decoder(edge_embedding).squeeze(-1)
 
 
-    # ============================================================
-    # 3. HELPERS
-    # ============================================================
+                                                                  
+                
+                                                                  
 
     def get_edge_index(split_data):
         return split_data.edge_label_index
@@ -228,7 +228,7 @@ def finetune_gnn():
     ):
         model.eval()
 
-        # Each split uses its own message-passing graph.
+                                                        
         z = model.encode(x, split_data.edge_index)
 
         logits = model.decode(
@@ -261,12 +261,12 @@ def finetune_gnn():
         return float(loss.item())
 
 
-    # ============================================================
-    # 4. HYPERPARAMETER GRID
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
-    # Start with this manageable grid.
-    # 2 * 2 * 2 * 2 * 2 = 32 configurations.
+                                      
+                                            
 
     PARAM_GRID = {
         "hidden_channels": [32, 64],
@@ -279,13 +279,13 @@ def finetune_gnn():
     EPOCHS = 150
     PATIENCE = 20
 
-    # Use validation loss for early stopping to avoid repeatedly
-    # choosing epochs by noisy accuracy. Threshold is still selected
-    # by validation accuracy after training.
+                                                                
+                                                                    
+                                            
 
-    # ============================================================
-    # 5. GRID SEARCH
-    # ============================================================
+                                                                  
+                    
+                                                                  
 
     grid_keys = list(PARAM_GRID)
     combinations = list(
@@ -368,7 +368,7 @@ def finetune_gnn():
             if epochs_without_improvement >= PATIENCE:
                 break
 
-        # Restore the epoch with lowest validation loss.
+                                                        
         model.load_state_dict(best_epoch_state)
 
         val_probs = predict_probabilities(
@@ -421,9 +421,9 @@ def finetune_gnn():
             print("  --> New best model")
 
 
-    # ============================================================
-    # 6. SAVE SEARCH RESULTS
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
     results_df = pd.DataFrame(results).sort_values(
         ["validation_accuracy", "validation_AP"],
@@ -444,9 +444,9 @@ def finetune_gnn():
     print("Selected threshold:", best_threshold)
 
 
-    # ============================================================
-    # 7. REBUILD BEST MODEL AND SAVE
-    # ============================================================
+                                                                  
+                                    
+                                                                  
 
     final_model = Net(
         in_channels=x.size(1),
@@ -470,9 +470,9 @@ def finetune_gnn():
     )
 
 
-    # ============================================================
-    # 8. TEST EVALUATION — RUN ONCE AFTER MODEL SELECTION
-    # ============================================================
+                                                                  
+                                                         
+                                                                  
 
     y_test_np = test_labels.cpu().numpy().astype(int)
 
@@ -522,9 +522,9 @@ def finetune_gnn():
         json.dump(test_metrics, f, indent=2)
 
 
-    # ============================================================
-    # 9. PRECISION-RECALL CURVE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     precision, recall, _ = precision_recall_curve(
         y_test_np, test_probs
@@ -556,18 +556,18 @@ def finetune_gnn():
     print(f"\nResults saved in: {OUTPUT_DIR}")
 
 
-# ============================================================
-# 1. CONFIGURATION
-# ============================================================
+                                                              
+                  
+                                                              
 def finetune_xgboost():
     SEED = 42
     OUTPUT_DIR = "finetuning/xgboost_accuracy_grid_results"
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # ============================================================
-    # 2. HYPERPARAMETER GRID
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
     PARAM_GRID = {
         "n_estimators": [300, 500, 800],
@@ -581,8 +581,8 @@ def finetune_xgboost():
         "gamma": [0.0, 0.2],
     }
 
-    # Full grid: 3 * 3 * 2 * 2 * 2 * 3 * 2 * 2 * 2 = 1,728 configs.
-    # Start with QUICK_SEARCH=True for a smaller search.
+                                                                   
+                                                        
 
     QUICK_SEARCH = True
 
@@ -598,7 +598,7 @@ def finetune_xgboost():
             "reg_alpha": [0.0, 0.1],
             "gamma": [0.0],
         }
-        # 2 * 3 * 2 * 1 * 1 * 3 * 2 * 2 * 1 = 144 configs.
+                                                          
 
     THRESHOLDS = np.round(np.arange(0.20, 0.801, 0.01), 2)
 
@@ -617,7 +617,7 @@ def finetune_xgboost():
         max_accuracy = accuracies.max()
         tied = np.flatnonzero(np.isclose(accuracies, max_accuracy))
 
-        # Prefer 0.50 when multiple thresholds give equal accuracy.
+                                                                   
         best_idx = tied[
             np.argmin(np.abs(THRESHOLDS[tied] - 0.5))
         ]
@@ -625,9 +625,9 @@ def finetune_xgboost():
         return float(THRESHOLDS[best_idx]), float(accuracies[best_idx])
 
 
-    # ============================================================
-    # 3. GRID SEARCH
-    # ============================================================
+                                                                  
+                    
+                                                                  
 
     grid_keys = list(PARAM_GRID)
     combinations = list(product(*(PARAM_GRID[k] for k in grid_keys)))
@@ -691,9 +691,9 @@ def finetune_xgboost():
             print("  --> New best configuration")
 
 
-    # ============================================================
-    # 4. SAVE GRID SEARCH RESULTS
-    # ============================================================
+                                                                  
+                                 
+                                                                  
 
     results_df = pd.DataFrame(search_results).sort_values(
         ["validation_accuracy", "validation_AP"],
@@ -714,11 +714,11 @@ def finetune_xgboost():
     print(f"Selected threshold: {best_threshold:.2f}")
 
 
-    # ============================================================
-    # 5. REFIT THE BEST MODEL
-    # ============================================================
-    # Fit on X_train only, preserving validation for model selection.
-    # Keep the validation-selected threshold fixed.
+                                                                  
+                             
+                                                                  
+                                                                     
+                                                   
 
     final_model = XGBClassifier(
         objective="binary:logistic",
@@ -738,9 +738,9 @@ def finetune_xgboost():
     joblib.dump(final_model, model_path)
 
 
-    # ============================================================
-    # 6. VALIDATION METRICS AFTER REFIT
-    # ============================================================
+                                                                  
+                                       
+                                                                  
 
     val_probs = final_model.predict_proba(X_val)[:, 1]
     val_preds = (val_probs >= best_threshold).astype(int)
@@ -753,9 +753,9 @@ def finetune_xgboost():
     print(f"ROC-AUC: {roc_auc_score(y_val, val_probs):.5f}")
 
 
-    # ============================================================
-    # 7. FINAL TEST EVALUATION
-    # ============================================================
+                                                                  
+                              
+                                                                  
 
     test_probs = final_model.predict_proba(X_test)[:, 1]
     test_preds = (test_probs >= best_threshold).astype(int)
@@ -791,9 +791,9 @@ def finetune_xgboost():
         json.dump(test_metrics, f, indent=2)
 
 
-    # ============================================================
-    # 8. PRECISION-RECALL CURVE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     precision, recall, _ = precision_recall_curve(y_test, test_probs)
 
@@ -821,9 +821,9 @@ def finetune_xgboost():
     plt.show()
 
 
-    # ============================================================
-    # 9. FEATURE IMPORTANCE
-    # ============================================================
+                                                                  
+                           
+                                                                  
 
     importance_df = pd.DataFrame({
         "feature_index": np.arange(X_train.shape[1]),
@@ -857,9 +857,9 @@ def finetune_xgboost():
     print("Grid results:", results_path)
 
 
-# ============================================================
-# 1. CONFIGURATION
-# ============================================================
+                                                              
+                  
+                                                              
 def finetune_logistic_regression():
 
     RANDOM_SEED = 42
@@ -885,9 +885,9 @@ def finetune_logistic_regression():
     print("Test positive rate:", y_test.mean())
 
 
-    # ============================================================
-    # 2. HYPERPARAMETER GRID
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
     PARAM_GRID = {
         "C": [0.01, 0.1, 1.0, 10.0, 100.0],
@@ -896,8 +896,8 @@ def finetune_logistic_regression():
         "class_weight": [None, "balanced"],
     }
 
-    # 5 * 2 * 2 * 2 = 40 configurations.
-    # All combinations below support the chosen penalties.
+                                        
+                                                          
     THRESHOLDS = np.round(np.arange(0.20, 0.801, 0.01), 2)
 
 
@@ -914,7 +914,7 @@ def finetune_logistic_regression():
 
         max_accuracy = accuracies.max()
 
-        # Break ties by choosing the threshold closest to 0.5.
+                                                              
         tied = np.flatnonzero(np.isclose(accuracies, max_accuracy))
         best_idx = tied[
             np.argmin(np.abs(THRESHOLDS[tied] - 0.5))
@@ -926,9 +926,9 @@ def finetune_logistic_regression():
         )
 
 
-    # ============================================================
-    # 3. GRID SEARCH
-    # ============================================================
+                                                                  
+                    
+                                                                  
 
     grid_keys = list(PARAM_GRID)
     all_combinations = list(
@@ -1005,9 +1005,9 @@ def finetune_logistic_regression():
             print("  --> New best model by validation accuracy")
 
 
-    # ============================================================
-    # 4. SAVE GRID SEARCH RESULTS
-    # ============================================================
+                                                                  
+                                 
+                                                                  
 
     results_df = pd.DataFrame(search_results)
     results_df = results_df.sort_values(
@@ -1029,11 +1029,11 @@ def finetune_logistic_regression():
     print(f"Selected threshold: {best_threshold:.2f}")
 
 
-    # ============================================================
-    # 5. REFIT SELECTED MODEL ON TRAINING DATA
-    # ============================================================
-    # Refit the winning configuration on training data only.
-    # Keep the validation-selected threshold fixed.
+                                                                  
+                                              
+                                                                  
+                                                            
+                                                   
 
     final_model = Pipeline([
         ("scaler", StandardScaler()),
@@ -1056,9 +1056,9 @@ def finetune_logistic_regression():
     joblib.dump(final_model, model_path)
 
 
-    # ============================================================
-    # 6. VALIDATION METRICS AFTER REFIT
-    # ============================================================
+                                                                  
+                                       
+                                                                  
 
     val_probs = final_model.predict_proba(X_val)[:, 1]
     val_preds = (val_probs >= best_threshold).astype(int)
@@ -1071,9 +1071,9 @@ def finetune_logistic_regression():
     print(f"ROC-AUC: {roc_auc_score(y_val, val_probs):.5f}")
 
 
-    # ============================================================
-    # 7. FINAL TEST EVALUATION
-    # ============================================================
+                                                                  
+                              
+                                                                  
 
     test_probs = final_model.predict_proba(X_test)[:, 1]
     test_preds = (test_probs >= best_threshold).astype(int)
@@ -1109,9 +1109,9 @@ def finetune_logistic_regression():
         json.dump(test_metrics, f, indent=2)
 
 
-    # ============================================================
-    # 8. PRECISION-RECALL CURVE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     precision, recall, _ = precision_recall_curve(
         y_test, test_probs
@@ -1144,9 +1144,9 @@ def finetune_logistic_regression():
     plt.show()
 
 
-    # ============================================================
-    # 9. COEFFICIENT IMPORTANCE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     classifier = final_model.named_steps["classifier"]
     coefficients = classifier.coef_.ravel()
@@ -1188,9 +1188,9 @@ def finetune_logistic_regression():
 
 
 
-# ============================================================
-# 1. CONFIGURATION
-# ============================================================
+                                                              
+                  
+                                                              
 def finetune_random_forest():
     RANDOM_SEED = 42
     OUTPUT_DIR = "finetuning/randomforest_accuracy_grid_results"
@@ -1215,9 +1215,9 @@ def finetune_random_forest():
     print("Test positive rate:", y_test.mean())
 
 
-    # ============================================================
-    # 2. HYPERPARAMETER GRID
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
     PARAM_GRID = {
         "n_estimators": [300, 600],
@@ -1228,8 +1228,8 @@ def finetune_random_forest():
         "class_weight": [None, "balanced"],
     }
 
-    # 2 * 3 * 3 * 4 * 3 * 2 = 432 configurations.
-    # Set QUICK_SEARCH=True for a smaller initial search.
+                                                 
+                                                         
     QUICK_SEARCH = False
 
     if QUICK_SEARCH:
@@ -1242,7 +1242,7 @@ def finetune_random_forest():
             "class_weight": [None, "balanced"],
         }
 
-    # Tune thresholds for validation accuracy.
+                                              
     THRESHOLDS = np.round(np.arange(0.20, 0.801, 0.01), 2)
 
 
@@ -1259,7 +1259,7 @@ def finetune_random_forest():
 
         max_accuracy = accuracies.max()
 
-        # Break ties by choosing the threshold closest to 0.5.
+                                                              
         tied = np.flatnonzero(np.isclose(accuracies, max_accuracy))
         best_idx = tied[
             np.argmin(np.abs(THRESHOLDS[tied] - 0.5))
@@ -1271,9 +1271,9 @@ def finetune_random_forest():
         )
 
 
-    # ============================================================
-    # 3. GRID SEARCH
-    # ============================================================
+                                                                  
+                    
+                                                                  
 
     grid_keys = list(PARAM_GRID)
     all_combinations = list(
@@ -1343,9 +1343,9 @@ def finetune_random_forest():
             print("  --> New best model by validation accuracy")
 
 
-    # ============================================================
-    # 4. SAVE GRID SEARCH RESULTS
-    # ============================================================
+                                                                  
+                                 
+                                                                  
 
     results_df = pd.DataFrame(search_results)
     results_df = results_df.sort_values(
@@ -1367,12 +1367,12 @@ def finetune_random_forest():
     print(f"Selected threshold: {best_threshold:.2f}")
 
 
-    # ============================================================
-    # 5. REFIT SELECTED MODEL ON TRAINING DATA
-    # ============================================================
-    # Refit using the chosen configuration. The validation set is
-    # not included in fitting, and the threshold remains validation-
-    # selected.
+                                                                  
+                                              
+                                                                  
+                                                                 
+                                                                    
+               
 
     final_model = RandomForestClassifier(
         **best_params,
@@ -1388,9 +1388,9 @@ def finetune_random_forest():
     joblib.dump(final_model, model_path)
 
 
-    # ============================================================
-    # 6. VALIDATION METRICS AFTER REFIT
-    # ============================================================
+                                                                  
+                                       
+                                                                  
 
     val_probs = final_model.predict_proba(X_val)[:, 1]
     val_preds = (val_probs >= best_threshold).astype(int)
@@ -1403,10 +1403,10 @@ def finetune_random_forest():
     print(f"ROC-AUC: {roc_auc_score(y_val, val_probs):.5f}")
 
 
-    # ============================================================
-    # 7. FINAL TEST EVALUATION
-    # ============================================================
-    # Do not change hyperparameters or threshold based on test results.
+                                                                  
+                              
+                                                                  
+                                                                       
 
     test_probs = final_model.predict_proba(X_test)[:, 1]
     test_preds = (test_probs >= best_threshold).astype(int)
@@ -1442,9 +1442,9 @@ def finetune_random_forest():
         json.dump(test_metrics, f, indent=2)
 
 
-    # ============================================================
-    # 8. PRECISION-RECALL CURVE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     precision, recall, _ = precision_recall_curve(
         y_test, test_probs
@@ -1474,9 +1474,9 @@ def finetune_random_forest():
     plt.show()
 
 
-    # ============================================================
-    # 9. FEATURE IMPORTANCE
-    # ============================================================
+                                                                  
+                           
+                                                                  
 
     importances = final_model.feature_importances_
 
@@ -1514,9 +1514,9 @@ def finetune_random_forest():
     print("Grid results:", results_path)
 
 
-# ============================================================
-# 1. CONFIGURATION
-# ============================================================
+                                                              
+                  
+                                                              
 def finetune_catboost():
     RANDOM_SEED = 42
     EARLY_STOPPING_ROUNDS = 100
@@ -1542,9 +1542,9 @@ def finetune_catboost():
     print("Test positive rate:", y_test.mean())
 
 
-    # ============================================================
-    # 2. HYPERPARAMETER GRID
-    # ============================================================
+                                                                  
+                            
+                                                                  
 
     PARAM_GRID = {
         "depth": [4, 6, 8],
@@ -1556,7 +1556,7 @@ def finetune_catboost():
 
     ITERATION_OPTIONS = [500, 1000]
 
-    # Search a broad range, including the default threshold.
+                                                            
     THRESHOLDS = np.round(np.arange(0.20, 0.801, 0.01), 2)
 
 
@@ -1573,7 +1573,7 @@ def finetune_catboost():
 
         max_accuracy = accuracies.max()
 
-        # If tied, choose the threshold closest to 0.5.
+                                                       
         tied = np.flatnonzero(
             np.isclose(accuracies, max_accuracy)
         )
@@ -1587,9 +1587,9 @@ def finetune_catboost():
         )
 
 
-    # ============================================================
-    # 3. GRID SEARCH
-    # ============================================================
+                                                                  
+                    
+                                                                  
 
     grid_keys = list(PARAM_GRID)
     all_combinations = list(
@@ -1643,7 +1643,7 @@ def finetune_catboost():
 
             val_probs = model.predict_proba(X_val)[:, 1]
 
-            # Tune threshold using validation data only.
+                                                        
             threshold, val_accuracy = best_accuracy_threshold(
                 y_val, val_probs
             )
@@ -1692,9 +1692,9 @@ def finetune_catboost():
                 print("  --> New best model by validation accuracy")
 
 
-    # ============================================================
-    # 4. SAVE GRID SEARCH RESULTS
-    # ============================================================
+                                                                  
+                                 
+                                                                  
 
     results_df = pd.DataFrame(search_results)
     results_df = results_df.sort_values(
@@ -1716,11 +1716,11 @@ def finetune_catboost():
     print(f"Selected threshold: {best_threshold:.2f}")
 
 
-    # ============================================================
-    # 5. REFIT SELECTED MODEL ON TRAINING DATA
-    # ============================================================
-    # Keep the validation set out of model fitting.
-    # Preserve the threshold selected during validation tuning.
+                                                                  
+                                              
+                                                                  
+                                                   
+                                                               
 
     final_model = CatBoostClassifier(
         **best_params,
@@ -1740,9 +1740,9 @@ def finetune_catboost():
     final_model.save_model(model_path)
 
 
-    # ============================================================
-    # 6. VALIDATION METRICS AFTER REFIT
-    # ============================================================
+                                                                  
+                                       
+                                                                  
 
     val_probs = final_model.predict_proba(X_val)[:, 1]
     val_preds = (val_probs >= best_threshold).astype(int)
@@ -1755,9 +1755,9 @@ def finetune_catboost():
     print(f"ROC-AUC: {roc_auc_score(y_val, val_probs):.5f}")
 
 
-    # ============================================================
-    # 7. FINAL TEST EVALUATION — DO NOT USE FOR TUNING
-    # ============================================================
+                                                                  
+                                                      
+                                                                  
 
     test_probs = final_model.predict_proba(X_test)[:, 1]
     test_preds = (test_probs >= best_threshold).astype(int)
@@ -1793,9 +1793,9 @@ def finetune_catboost():
         json.dump(test_metrics, f, indent=2)
 
 
-    # ============================================================
-    # 8. PRECISION-RECALL CURVE
-    # ============================================================
+                                                                  
+                               
+                                                                  
 
     precision, recall, _ = precision_recall_curve(
         y_test, test_probs
@@ -1828,9 +1828,9 @@ def finetune_catboost():
     plt.show()
 
 
-    # ============================================================
-    # 9. FEATURE IMPORTANCE
-    # ============================================================
+                                                                  
+                           
+                                                                  
 
     importances = final_model.get_feature_importance()
 
@@ -1885,9 +1885,9 @@ y_test  = np.asarray(dataset["y_test"], dtype=np.int64)
 print("Training:", X_train.shape, y_train.shape)
 print("Validation:", X_val.shape, y_val.shape)
 print("Test:", X_test.shape, y_test.shape)
-# For trusted files you created yourself.
-# weights_only=False may be needed for PyG Data objects
-# on newer PyTorch versions.
+                                         
+                                                       
+                            
 saved = torch.load(
     "data/processed/link_prediction_graphs.pt",
     map_location="cpu",

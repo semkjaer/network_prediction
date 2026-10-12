@@ -30,12 +30,12 @@ from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 from torch_geometric.data import Data
 from sklearn.base import BaseEstimator, TransformerMixin
-# PyTorch
+         
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# PyTorch Geometric
+                   
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 class AutoScaler(BaseEstimator, TransformerMixin):
@@ -47,12 +47,12 @@ class AutoScaler(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         X = pd.DataFrame(X).astype(float).replace([np.inf, -np.inf], np.nan)
 
-        # Replace inf/NaN with the column's max finite value + 1 (or median for NaN)
+                                                                                    
         self.fill_ = X.max() + 1
         X = X.fillna(self.fill_)
 
-        # Columns whose absolute skew exceeds the threshold get log1p
-        # (only non-negative columns, since log1p needs values > -1)
+                                                                     
+                                                                    
         nonneg = (X >= 0).all()
         skew = X.skew().abs()
         self.log_cols_ = X.columns[(skew > self.skew_threshold) & nonneg].tolist()
@@ -74,12 +74,12 @@ class AutoScaler(BaseEstimator, TransformerMixin):
         return self.scaler_.transform(X).astype(np.float32)
 from link_features import compute_katz_scores, create_edge_features
 
-# Models pickled from a notebook/script refer to __main__.AutoScaler.
+                                                                     
 __main__.AutoScaler = AutoScaler
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
+                                                                    
+               
+                                                                    
 EDGES_PATH = Path("data/input/edges_train.edgelist")
 SOLUTION_PATH = Path("data/input/solutionInput.csv")
 DATASET_PATH = Path("data/processed/link_prediction_dataset.npz")
@@ -88,12 +88,12 @@ METADATA_PATH = Path("data/processed/feature_metadata.json")
 OUT_DIR = Path("data/output")
 
 
-N_POSITIVES = None         # None = exactly half of the solution pairs (708 of 1416)
-SUBMISSION_COLUMN = "Predicted"   # match the column name of the sample submission
-VERIFY_FEATURES = True     # recompute X_test with link_features.py and compare
-SANITY_CHECK = True        # train-only fit, top-K accuracy on the test split
+N_POSITIVES = None                                                                  
+SUBMISSION_COLUMN = "Predicted"                                                   
+VERIFY_FEATURES = True                                                         
+SANITY_CHECK = True                                                          
 
-FINAL_MODEL = "Logistic Regression"  # None = pick the best by test top-K accuracy
+FINAL_MODEL = "Logistic Regression"                                               
 
 MODEL_PATHS = {
     "Logistic Regression": Path(
@@ -169,9 +169,9 @@ def predict_gnn_probabilities(model, data_obj, edge_features, device="cpu"):
     logits = model.decode(z, edge_label_index, edge_feats)
     return torch.sigmoid(logits).cpu().numpy()
 
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+                                                                    
+         
+                                                                    
 def canonical(pairs):
     return {
         (min(int(a), int(b)), max(int(a), int(b)))
@@ -219,9 +219,9 @@ def top_k_labels(score, k):
     return label
 
 
-# ------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------
+                                                                    
+      
+                                                                    
 def main():
     dataset = np.load(DATASET_PATH)
     X_train, y_train = dataset["X_train"], dataset["y_train"].astype(int)
@@ -237,7 +237,7 @@ def main():
     katz_beta = float(metadata["katz_beta"])
     feature_names = metadata["feature_names"]
 
-    # 1. Full known graph with identity node ids -------------------------
+                                                                          
     G_file = nx.read_edgelist(
         EDGES_PATH, delimiter=",", nodetype=int, create_using=nx.Graph()
     )
@@ -248,7 +248,7 @@ def main():
 
     check_alignment(saved, edge_set)
 
-    # 2. Does link_features.py reproduce the saved training features? ----
+                                                                          
     if VERIFY_FEATURES:
         print("\nVerifying feature code against saved X_test ...")
         td = saved["test_data"]
@@ -262,7 +262,7 @@ def main():
             print("WARNING: features differ from saved X_test:",
                   [feature_names[i] for i in bad])
 
-    # 3. Solution pairs and their features -------------------------------
+                                                                          
     df = pd.read_csv(SOLUTION_PATH, index_col=0)
     print("\nSolution file:", df.shape)
     print(df.head())
@@ -296,7 +296,7 @@ def main():
     for i in np.argsort(-np.abs(shift))[:5]:
         print(f"  {feature_names[i]:<28s} {shift[i]:+.2f}")
 
-    # 4. Choose the model ------------------------------------------------
+                                                                          
     available = {n: p for n, p in MODEL_PATHS.items() if p.is_file()}
     if FINAL_MODEL is not None:
         if FINAL_MODEL not in available:
@@ -319,7 +319,7 @@ def main():
         accuracies = {}
         for name, path in candidates.items():
             if name == "GNN":
-                # For GNN sanity check, load saved checkpoint configuration
+                                                                           
                 checkpoint = torch.load(path, map_location=device, weights_only=False)
                 params = checkpoint["model_params"]
                 gnn_model = Net(
@@ -332,7 +332,7 @@ def main():
                 gnn_model.load_state_dict(checkpoint["model_state_dict"])
                 
                 td = saved["test_data"]
-                test_edge_feats = X_test # from dataset npz or recomputed
+                test_edge_feats = X_test                                 
                 p = predict_gnn_probabilities(gnn_model, td, test_edge_feats, device)
             else:
                 model = fresh_model(name, path)
@@ -345,7 +345,7 @@ def main():
             chosen = max(accuracies, key=accuracies.get)
             print(f"Selected the best model: {chosen}")
 
-    # 5. Predict on solution pairs ---------------------------------------
+                                                                          
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if chosen == "GNN":
@@ -364,7 +364,7 @@ def main():
 
         prob = predict_gnn_probabilities(final_gnn, solution_graph, X_sol, device)
     else:
-        # Standard scikit-learn / CatBoost full retrain pathway
+                                                               
         X_all = np.vstack([X_train, X_val, X_test]).astype(np.float32)
         y_all = np.concatenate([y_train, y_val, y_test])
         print(f"\nFitting {chosen} on all labelled pairs: {X_all.shape}, "

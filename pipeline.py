@@ -1,25 +1,25 @@
-# ==========================================
-# IMPORTS
-# ==========================================
+                                            
+         
+                                            
 
-# Standard libraries
+                    
 import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib
-matplotlib.use("Agg")   # no Tk, saves to files only
+matplotlib.use("Agg")                               
 import matplotlib.pyplot as plt
-# PyTorch
+         
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# PyTorch Geometric
+                   
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 
-# Machine learning models
+                         
 from catboost import CatBoostClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
@@ -27,7 +27,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
-# Evaluation metrics
+                    
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -67,24 +67,24 @@ from sklearn.metrics import (
     auc
 )
 
-# ==========================================
-# TRAIN AND EVALUATE ALL LINK-PREDICTION MODELS
-# ==========================================
-# Assumes preprocessing has already created:
-# train_data, val_data, test_data
-# X_train, X_val, X_test
-# and the 34 engineered edge features.
-#
-# Trains:
-#   1. Random Forest
-#   2. Logistic Regression
-#   3. XGBoost
-#   4. CatBoost
-#   5. GNN
-#
-# Selects thresholds using VALIDATION data only.
-# Evaluates final metrics on TEST data.
-# ==========================================
+                                            
+                                               
+                                            
+                                            
+                                 
+                        
+                                      
+ 
+         
+                    
+                          
+              
+               
+          
+ 
+                                                
+                                       
+                                            
 
 import copy
 import random
@@ -118,9 +118,9 @@ from sklearn.metrics import (
     precision_recall_curve,
 )
 
-# ==========================================
-# 1. REPRODUCIBILITY AND LABELS
-# ==========================================
+                                            
+                               
+                                            
 
 
 edges_path = 'data/input/edges_train.edgelist'
@@ -131,31 +131,31 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-# Print the first few rows to inspect what column holds the category
+                                                                    
 print(df_attributes.head())
 
-# 2. Extract the column containing the category letters ('a', 'b', 'c', etc.)
-# If your CSV has the category in the SECOND column (index 1), use iloc[:, 1]. 
-# If it's the ONLY column, use iloc[:, 0].
-category_col = df_attributes.iloc[:, 0]  # Adjust index if necessary!
+                                                                             
+                                                                               
+                                          
+category_col = df_attributes.iloc[:, 0]                              
 
-# Check unique values to confirm it's just your 6 categories
+                                                            
 print("Unique categories found:", category_col.unique())
-# Expected output: ['b', 'a', 'c', 'e', 'd', 'f'] (or similar)
+                                                              
 
-# 3. Map letters to integers (0 to 5)
+                                     
 category_mapping = {val: i for i, val in enumerate(sorted(category_col.unique()))}
 numeric_cats = category_col.map(category_mapping).values
 
-# Convert to tensor
+                   
 cat_tensor = torch.tensor(numeric_cats, dtype=torch.long)
 
-# 4. One-hot encode (num_classes should be 6, not 1800)
+                                                       
 num_classes = len(category_mapping)
 x = F.one_hot(cat_tensor, num_classes=num_classes).float()
 
 print(f"Corrected node feature matrix shape: {x.shape}") 
-# Should now correctly print: torch.Size([1800, 6])
+                                                   
 
 import pandas as pd
 import torch
@@ -164,9 +164,9 @@ import networkx as nx
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 
-# ==========================================
-# 1. PREPROCESS NODE ATTRIBUTES
-# ==========================================
+                                            
+                               
+                                            
 
 category_col = df_attributes.iloc[:, 0]
 
@@ -195,9 +195,9 @@ num_nodes = len(df_attributes)
 print("Number of nodes:", num_nodes)
 print("Feature matrix:", x.shape)
 
-# ==========================================
-# 2. LOAD EDGES AND INCLUDE ALL NODES
-# ==========================================
+                                            
+                                     
+                                            
 
 
 G = nx.read_edgelist(
@@ -207,21 +207,21 @@ G = nx.read_edgelist(
     create_using=nx.Graph()
 )
 
-# IMPORTANT:
-# Add every node, including nodes with no edges.
+            
+                                                
 G.add_nodes_from(range(num_nodes))
 
 print("Nodes in graph:", G.number_of_nodes())
 print("Undirected edges:", G.number_of_edges())
 
-# Check that node IDs correspond to feature rows 0 ... num_nodes-1.
+                                                                   
 if set(G.nodes()) != set(range(num_nodes)):
     raise ValueError(
         "Graph node IDs do not match feature row indices. "
         "Map the actual node IDs to the correct attribute rows."
     )
 
-# Build edge_index directly so node i always means node id i
+                                                            
 edges = np.array(
     sorted({(min(u, v), max(u, v)) for u, v in G.edges() if u != v}),
     dtype=np.int64,
@@ -232,7 +232,7 @@ edge_index = torch.as_tensor(
 
 data = Data(x=x, edge_index=edge_index, num_nodes=num_nodes)
 
-# Stop immediately if ids are not preserved
+                                           
 assert {
     (min(int(u), int(v)), max(int(u), int(v)))
     for u, v in data.edge_index.t().tolist()
@@ -261,7 +261,7 @@ def compute_katz_scores(graph_data, beta=None, max_path_length=5):
     G = pyg_to_networkx(graph_data)
     num_nodes = graph_data.x.size(0)
 
-    # Sparse adjacency matrix, with node order fixed as 0,...,N-1
+                                                                 
     A = nx.to_scipy_sparse_array(
         G,
         nodelist=range(num_nodes),
@@ -270,16 +270,16 @@ def compute_katz_scores(graph_data, beta=None, max_path_length=5):
     )
     A = sp.csr_matrix(A)
 
-    # Choose a conservative beta if one was not specified.
-    # This is below 1 / maximum degree, which is a safe
-    # upper bound for the spectral radius of this undirected graph.
+                                                          
+                                                       
+                                                                   
     if beta is None:
         max_degree = max(dict(G.degree()).values(), default=1)
         beta = 0.9 / max(max_degree, 1)
 
     print(f"Katz beta: {beta:.6f}")
 
-    # Accumulate beta^l * A^l
+                             
     power = A.copy()
     katz = beta * power
 
@@ -310,9 +310,9 @@ def pyg_to_networkx(graph_data):
     return G
 
 
-# ==========================================
-# 1. ENGINEER CANDIDATE EDGE FEATURES
-# ==========================================
+                                            
+                                     
+                                            
 
 
 import numpy as np
@@ -355,9 +355,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
     category_ids = np.argmax(x, axis=1)
 
-    # --------------------------------------------------
-    # Adjacency and transition matrices
-    # --------------------------------------------------
+                                                        
+                                       
+                                                        
     A = nx.to_scipy_sparse_array(
         G,
         nodelist=range(n),
@@ -371,13 +371,13 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     nonzero = degrees_array > 0
     inverse_degrees[nonzero] = 1.0 / degrees_array[nonzero]
 
-    # P[u, v] = probability of moving from u to v.
+                                                  
     P = sp.diags(inverse_degrees) @ A
     P = P.tocsr()
 
-    # --------------------------------------------------
-    # Existing feature: greedy modularity communities
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     from networkx.algorithms.community import (
         greedy_modularity_communities,
     )
@@ -395,9 +395,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         for node in range(n):
             node_community.setdefault(node, len(node_community))
 
-    # --------------------------------------------------
-    # Existing feature: endpoint homophily
-    # --------------------------------------------------
+                                                        
+                                          
+                                                        
     neighbors = {
         node: set(G.neighbors(node))
         for node in range(n)
@@ -417,9 +417,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
                 for v in node_neighbors
             ) / len(node_neighbors)
 
-    # --------------------------------------------------
-    # New feature 1: Rooted PageRank
-    # --------------------------------------------------
+                                                        
+                                    
+                                                        
     alpha = 0.85
     rooted_pagerank = {}
 
@@ -442,9 +442,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
             (1.0 - alpha) * restart
         )
 
-    # --------------------------------------------------
-    # New features 2 and 3: Hitting and commute times
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     component_id = {}
     component_volume = {}
     laplacian_pinv = {}
@@ -500,9 +500,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
         return hitting_time, commute_time
 
-    # --------------------------------------------------
-    # New feature 4: SimRank
-    # --------------------------------------------------
+                                                        
+                            
+                                                        
     S = np.eye(n, dtype=np.float64)
 
     for _ in range(simrank_iterations):
@@ -511,9 +511,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         np.fill_diagonal(S_next, 1.0)
         S = S_next
 
-    # --------------------------------------------------
-    # New feature 5: Low-rank adjacency approximation
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     if n > 2 and low_rank_dim >= 1:
         k = min(low_rank_dim, n - 1)
 
@@ -534,9 +534,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     else:
         low_rank_embedding = np.zeros((n, 1), dtype=np.float64)
 
-    # --------------------------------------------------
-    # Original feature engineering + new methods
-    # --------------------------------------------------
+                                                        
+                                                
+                                                        
     rows = []
 
     for u, v in candidate_edges:
@@ -651,9 +651,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     return np.asarray(rows, dtype=np.float32)
 
 
-# ==========================================
-# 2. GNN WITH MLP EDGE DECODER
-# ==========================================
+                                            
+                              
+                                            
 class Net(nn.Module):
     def __init__(
         self,
@@ -698,9 +698,9 @@ class Net(nn.Module):
         return self.decoder(edge_embedding).squeeze(-1)
 
 
-# ==========================================
-# 3. SPLIT EDGES INTO TRAIN / VAL / TEST
-# ==========================================
+                                            
+                                        
+                                            
 torch.manual_seed(42)
 np.random.seed(42)
 
@@ -732,7 +732,7 @@ train_targets = get_positive_targets(train_data)
 val_targets = get_positive_targets(val_data)
 test_targets = get_positive_targets(test_data)
 
-# Target-positive edges must not overlap between prediction splits.
+                                                                   
 assert train_targets.isdisjoint(val_targets)
 assert train_targets.isdisjoint(test_targets)
 assert val_targets.isdisjoint(test_targets)
@@ -749,7 +749,7 @@ def canonical_edges(edge_index):
         if u != v
     }
 
-# Check all three message-passing graphs.
+                                         
 for name, split_data in [
     ("Train", train_data),
     ("Validation", val_data),
@@ -822,9 +822,9 @@ print(
 )
 
 
-# ==========================================
-# 4. COMPUTE ENGINEERED EDGE FEATURES
-# ==========================================
+                                            
+                                     
+                                            
 print("\nComputing Katz scores...")
 G_train = pyg_to_networkx(train_data)
 max_degree = max(dict(G_train.degree()).values(), default=1)
@@ -858,9 +858,9 @@ assert len(X_val) == val_data.edge_label.numel()
 assert len(X_test) == test_data.edge_label.numel()
 
 
-# ==========================================
-# 5. INITIALIZE MODEL AND TENSORS
-# ==========================================
+                                            
+                                 
+                                            
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
@@ -894,7 +894,7 @@ y_test = (
 )
 
 
-# Keep candidate-edge order identical to feature/label order.
+                                                             
 assert len(X_train) == len(y_train)
 assert len(X_val) == len(y_val)
 assert len(X_test) == len(y_test)
@@ -908,9 +908,9 @@ print("Test examples:", len(y_test))
 print("Features per edge:", X_train.shape[1])
 
 
-# ==========================================
-# 2. THRESHOLD SELECTION
-# ==========================================
+                                            
+                        
+                                            
 
 def find_best_f1_threshold(y_true, probabilities):
     """Choose a classification threshold using validation data."""
@@ -929,9 +929,9 @@ def find_best_f1_threshold(y_true, probabilities):
 
     return float(thresholds[best_idx]), float(scores[best_idx])
 
-# ==========================================
-# 6. SAVE REUSABLE DATASET FOR ALL MODELS
-# ==========================================
+                                            
+                                         
+                                            
 import os
 import json
 import numpy as np
@@ -940,7 +940,7 @@ import torch
 OUTPUT_DIR = "data/processed"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Keep labels in CPU NumPy arrays
+                                 
 y_train = train_data.edge_label.detach().cpu().numpy().astype(np.int64)
 y_val = val_data.edge_label.detach().cpu().numpy().astype(np.int64)
 y_test = test_data.edge_label.detach().cpu().numpy().astype(np.int64)
@@ -952,7 +952,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 
-# Save features and labels for classical ML models
+                                                  
 np.savez_compressed(
     os.path.join(OUTPUT_DIR, "link_prediction_dataset.npz"),
     X_train=X_train.astype(np.float32),
@@ -963,8 +963,8 @@ np.savez_compressed(
     y_test=y_test,
 )
 
-# Save graph information for GNN models.
-# These objects are still on the CPU at this point.
+                                        
+                                                   
 torch.save(
     {
         "x": data.x.detach().cpu(),
@@ -974,19 +974,19 @@ torch.save(
     },
     os.path.join(OUTPUT_DIR, "link_prediction_graphs.pt"),
 )
-# Document the exact feature order
+                                  
 
 feature_names = (
-    # 1–6: Endpoint category-feature sums
+                                         
     [f"category_sum_{c}" for c in "abcdef"]
 
-    # 7–12: Absolute differences between endpoint category features
+                                                                   
     + [f"category_abs_diff_{c}" for c in "abcdef"]
 
-    # 13–18: Products of endpoint category features
+                                                   
     + [f"category_product_{c}" for c in "abcdef"]
 
-    # 19–29: Original structural features
+                                         
     + [
         "same_category",
         "common_neighbors",
@@ -1001,7 +1001,7 @@ feature_names = (
         "endpoint_homophily",
     ]
 
-    # 30–34: Additional structural features
+                                           
     + [
         "rooted_pagerank",
         "hitting_time",

@@ -100,9 +100,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
     category_ids = np.argmax(x, axis=1)
 
-    # --------------------------------------------------
-    # Adjacency and transition matrices
-    # --------------------------------------------------
+                                                        
+                                       
+                                                        
     A = nx.to_scipy_sparse_array(
         G,
         nodelist=range(n),
@@ -116,13 +116,13 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     nonzero = degrees_array > 0
     inverse_degrees[nonzero] = 1.0 / degrees_array[nonzero]
 
-    # P[u, v] = probability of moving from u to v.
+                                                  
     P = sp.diags(inverse_degrees) @ A
     P = P.tocsr()
 
-    # --------------------------------------------------
-    # Existing feature: greedy modularity communities
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     from networkx.algorithms.community import (
         greedy_modularity_communities,
     )
@@ -140,9 +140,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         for node in range(n):
             node_community.setdefault(node, len(node_community))
 
-    # --------------------------------------------------
-    # Existing feature: endpoint homophily
-    # --------------------------------------------------
+                                                        
+                                          
+                                                        
     neighbors = {
         node: set(G.neighbors(node))
         for node in range(n)
@@ -162,9 +162,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
                 for v in node_neighbors
             ) / len(node_neighbors)
 
-    # --------------------------------------------------
-    # New feature 1: Rooted PageRank
-    # --------------------------------------------------
+                                                        
+                                    
+                                                        
     alpha = 0.85
     rooted_pagerank = {}
 
@@ -187,9 +187,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
             (1.0 - alpha) * restart
         )
 
-    # --------------------------------------------------
-    # New features 2 and 3: Hitting and commute times
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     component_id = {}
     component_volume = {}
     laplacian_pinv = {}
@@ -245,9 +245,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
         return hitting_time, commute_time
 
-    # --------------------------------------------------
-    # New feature 4: SimRank
-    # --------------------------------------------------
+                                                        
+                            
+                                                        
     S = np.eye(n, dtype=np.float64)
 
     for _ in range(simrank_iterations):
@@ -256,9 +256,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         np.fill_diagonal(S_next, 1.0)
         S = S_next
 
-    # --------------------------------------------------
-    # New feature 5: Low-rank adjacency approximation
-    # --------------------------------------------------
+                                                        
+                                                     
+                                                        
     if n > 2 and low_rank_dim >= 1:
         k = min(low_rank_dim, n - 1)
 
@@ -279,9 +279,9 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     else:
         low_rank_embedding = np.zeros((n, 1), dtype=np.float64)
 
-    # --------------------------------------------------
-    # Original feature engineering + new methods
-    # --------------------------------------------------
+                                                        
+                                                
+                                                        
     rows = []
 
     for u, v in candidate_edges:
