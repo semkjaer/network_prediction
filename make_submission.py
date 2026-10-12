@@ -30,6 +30,14 @@ from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 from torch_geometric.data import Data
 from sklearn.base import BaseEstimator, TransformerMixin
+# PyTorch
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# PyTorch Geometric
+from torch_geometric.data import Data
+from torch_geometric.nn import GCNConv
 class AutoScaler(BaseEstimator, TransformerMixin):
     """Clean inf/NaN, log1p heavy-tailed columns, then standardise."""
 
@@ -79,14 +87,13 @@ GRAPHS_PATH = Path("data/processed/link_prediction_graphs.pt")
 METADATA_PATH = Path("data/processed/feature_metadata.json")
 OUT_DIR = Path("data/output")
 
-# Which model makes the final predictions. One of the keys of MODEL_PATHS,
-# or None to pick whichever has the best top-K accuracy on the test split.
-FINAL_MODEL = "Logistic Regression"
 
 N_POSITIVES = None         # None = exactly half of the solution pairs (708 of 1416)
 SUBMISSION_COLUMN = "Predicted"   # match the column name of the sample submission
 VERIFY_FEATURES = True     # recompute X_test with link_features.py and compare
 SANITY_CHECK = True        # train-only fit, top-K accuracy on the test split
+
+FINAL_MODEL = "GNN"
 
 MODEL_PATHS = {
     "Logistic Regression": Path(
@@ -101,8 +108,66 @@ MODEL_PATHS = {
     "CatBoost": Path(
         "finetuning/catboost_accuracy_grid_results/best_catboost.cbm"
     ),
+    "GNN": Path(
+        "finetuning/gnn_accuracy_grid_results/best_gnn.pt"
+    ),
 }
 
+
+class Net(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels=32,
+        out_channels=16,
+        edge_feature_channels=34,
+        dropout=0.2,
+    ):
+        super().__init__()
+        self.conv1 = GCNConv(in_channels, hidden_channels)
+        self.conv2 = GCNConv(hidden_channels, out_channels)
+        self.dropout = dropout
+
+        decoder_input_channels = 3 * out_channels + edge_feature_channels
+
+        self.decoder = nn.Sequential(
+            nn.Linear(decoder_input_channels, 64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, 1),
+        )
+
+    def encode(self, x, edge_index):
+        z = self.conv1(x, edge_index)
+        z = F.relu(z)
+        z = F.dropout(z, p=self.dropout, training=self.training)
+        z = self.conv2(z, edge_index)
+        return z
+
+    def decode(self, z, edge_label_index, edge_features):
+        src = z[edge_label_index[0]]
+        dst = z[edge_label_index[1]]
+        edge_embedding = torch.cat(
+            [src + dst, torch.abs(src - dst), src * dst, edge_features],
+            dim=-1,
+        )
+        return self.decoder(edge_embedding).squeeze(-1)
+
+@torch.no_grad()
+def predict_gnn_probabilities(model, data_obj, edge_features, device="cpu"):
+    model.eval()
+    model.to(device)
+    x_tensor = data_obj.x.to(device)
+    edge_index = data_obj.edge_index.to(device)
+    edge_label_index = data_obj.edge_label_index.to(device)
+    edge_feats = torch.as_tensor(edge_features, dtype=torch.float32, device=device)
+
+    z = model.encode(x_tensor, edge_index)
+    logits = model.decode(z, edge_label_index, edge_feats)
+    return torch.sigmoid(logits).cpu().numpy()
 
 # ------------------------------------------------------------------
 # Helpers
@@ -246,37 +311,74 @@ def main():
         candidates = available
 
     chosen = FINAL_MODEL
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     if SANITY_CHECK or chosen is None:
         print("\nTop-K accuracy on the test split (fit on train only):")
         k = int(y_test.sum())
         accuracies = {}
         for name, path in candidates.items():
-            model = fresh_model(name, path)
-            model.fit(X_train, y_train)
-            p = model.predict_proba(X_test)[:, 1]
+            if name == "GNN":
+                # For GNN sanity check, load saved checkpoint configuration
+                checkpoint = torch.load(path, map_location=device, weights_only=False)
+                params = checkpoint["model_params"]
+                gnn_model = Net(
+                    in_channels=x.size(1),
+                    hidden_channels=params["hidden_channels"],
+                    out_channels=params["out_channels"],
+                    edge_feature_channels=X_train.shape[1],
+                    dropout=params["dropout"],
+                ).to(device)
+                gnn_model.load_state_dict(checkpoint["model_state_dict"])
+                
+                td = saved["test_data"]
+                test_edge_feats = X_test # from dataset npz or recomputed
+                p = predict_gnn_probabilities(gnn_model, td, test_edge_feats, device)
+            else:
+                model = fresh_model(name, path)
+                model.fit(X_train, y_train)
+                p = model.predict_proba(X_test)[:, 1]
+
             accuracies[name] = accuracy_score(y_test, top_k_labels(p, k))
             print(f"  {name:<20s} {accuracies[name]:.4f}")
         if chosen is None:
             chosen = max(accuracies, key=accuracies.get)
             print(f"Selected the best model: {chosen}")
 
-    # 5. Fit a fresh model on ALL labelled data and predict --------------
-    X_all = np.vstack([X_train, X_val, X_test]).astype(np.float32)
-    y_all = np.concatenate([y_train, y_val, y_test])
-    print(f"\nFitting {chosen} on all labelled pairs: {X_all.shape}, "
-          f"positive rate {y_all.mean():.3f}")
+    # 5. Predict on solution pairs ---------------------------------------
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    model = fresh_model(chosen, available[chosen])
-    model.fit(X_all, y_all)
-    prob = model.predict_proba(X_sol)[:, 1]
+    if chosen == "GNN":
+        print(f"\nLoading best GNN checkpoint for solution scoring...")
+        checkpoint = torch.load(available["GNN"], map_location=device, weights_only=False)
+        params = checkpoint["model_params"]
+        
+        final_gnn = Net(
+            in_channels=x.size(1),
+            hidden_channels=params["hidden_channels"],
+            out_channels=params["out_channels"],
+            edge_feature_channels=X_sol.shape[1],
+            dropout=params["dropout"],
+        ).to(device)
+        final_gnn.load_state_dict(checkpoint["model_state_dict"])
+
+        prob = predict_gnn_probabilities(final_gnn, solution_graph, X_sol, device)
+    else:
+        # Standard scikit-learn / CatBoost full retrain pathway
+        X_all = np.vstack([X_train, X_val, X_test]).astype(np.float32)
+        y_all = np.concatenate([y_train, y_val, y_test])
+        print(f"\nFitting {chosen} on all labelled pairs: {X_all.shape}, "
+              f"positive rate {y_all.mean():.3f}")
+
+        model = fresh_model(chosen, available[chosen])
+        model.fit(X_all, y_all)
+        prob = model.predict_proba(X_sol)[:, 1]
 
     print("Probability quantiles (min, 25%, 50%, 75%, max):",
           np.round(np.quantile(prob, [0, 0.25, 0.5, 0.75, 1]), 4))
     print("Distinct probability values:", len(np.unique(np.round(prob, 6))))
 
     label = top_k_labels(prob, n_pos)
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     detail = df.copy()
     detail["probability"] = prob

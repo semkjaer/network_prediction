@@ -420,8 +420,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     # New feature 1: Rooted PageRank
     # --------------------------------------------------
-    # Cache one personalized PageRank vector per candidate endpoint.
-    # This avoids rerunning PageRank for every candidate pair.
     alpha = 0.85
     rooted_pagerank = {}
 
@@ -447,11 +445,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     # New features 2 and 3: Hitting and commute times
     # --------------------------------------------------
-    # Laplacian pseudoinverse gives exact random-walk hitting
-    # times for an undirected graph, up to floating-point error.
-    #
-    # Compute separately per connected component so disconnected
-    # node pairs can be assigned -1.
     component_id = {}
     component_volume = {}
     laplacian_pinv = {}
@@ -499,7 +492,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         h_uv = volume * (L_pinv[j, j] - L_pinv[i, j])
         h_vu = volume * (L_pinv[i, i] - L_pinv[i, j])
 
-        # Remove tiny negative values caused by numerical error.
         h_uv = max(float(h_uv), 0.0)
         h_vu = max(float(h_vu), 0.0)
 
@@ -511,12 +503,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     # New feature 4: SimRank
     # --------------------------------------------------
-    # Iterative approximation:
-    # S_(t+1) = decay * P @ S_t @ P.T
-    # with diagonal values fixed to 1.
-    #
-    # Dense n x n similarity matrix; this can use substantial
-    # computation for larger graphs.
     S = np.eye(n, dtype=np.float64)
 
     for _ in range(simrank_iterations):
@@ -528,9 +514,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
     # --------------------------------------------------
     # New feature 5: Low-rank adjacency approximation
     # --------------------------------------------------
-    # Approximate A using its leading singular components.
-    # The dot product in this embedding estimates structural
-    # similarity from the low-rank approximation.
     if n > 2 and low_rank_dim >= 1:
         k = min(low_rank_dim, n - 1)
 
@@ -561,12 +544,10 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
 
         xu, xv = x[u], x[v]
 
-        
         had_edge = G.has_edge(u, v)
         if had_edge:
             G.remove_edge(u, v)
 
-        # Original 18 endpoint features
         category_sum = xu + xv
         category_diff = np.abs(xu - xv)
         category_product = xu * xv
@@ -605,13 +586,11 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             distance = -1.0
 
-        # If had_edge was true, restore the edge in G
         if had_edge:
             G.add_edge(u, v)
 
         katz_score = float(katz[u, v])
 
-        # Original three additional features
         same_community = float(
             node_community[u] == node_community[v]
         )
@@ -639,18 +618,14 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
             endpoint_homophily,
         ]
 
-        # New feature 1: symmetric rooted PageRank
         rpr_uv = rooted_pagerank[u][v]
         rpr_vu = rooted_pagerank[v][u]
         rooted_pagerank_score = (rpr_uv + rpr_vu) / 2.0
 
-        # New features 2 and 3
         hitting_time, commute_time = random_walk_times(u, v)
 
-        # New feature 4
         simrank_score = float(S[u, v])
 
-        # New feature 5
         low_rank_score = float(
             np.dot(low_rank_embedding[u], low_rank_embedding[v])
         )
@@ -674,7 +649,6 @@ def create_edge_features(graph_data, katz, simrank_iterations=8,
         rows.append(row)
 
     return np.asarray(rows, dtype=np.float32)
-
 
 
 # ==========================================
